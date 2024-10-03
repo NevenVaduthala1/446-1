@@ -169,7 +169,7 @@ class RationalPolynomial:
         self.denominator = denominator
         if np.all(self.denominator.coefficients == 0):
             raise ValueError("The denominator cannot be zero.")
-
+        
         self.simplify()  # Simplify the rational polynomial upon initialization
 
     def __repr__(self):
@@ -185,13 +185,13 @@ class RationalPolynomial:
         expression = expression.replace(' ', '')  # Remove spaces
         if '/' not in expression:
             raise ValueError("Expression does not represent a rational polynomial")
-
+        
         numerator_str, denominator_str = expression.split('/')
-
+        
         # Create Polynomial objects for both parts
         numerator = Polynomial.from_string(numerator_str)
         denominator = Polynomial.from_string(denominator_str)
-
+        
         return RationalPolynomial(numerator, denominator)
 
     # Method to simplify the rational polynomial by checking for common factors
@@ -243,11 +243,11 @@ class RationalPolynomial:
             # Display the intermediate addition step
             print(f"Addition (Before Simplification): ({self.numerator}) * ({other.denominator}) + ({other.numerator}) * ({self.denominator})")
             print(f"= {new_numerator}/{new_denominator}")
-
+            
             # Return the resulting rational polynomial
             result = RationalPolynomial(new_numerator, new_denominator)
             result.simplify()  # Simplify the result
-
+            
             # Display the simplified result
             print(f"Simplified Result: {result}")
             return result
@@ -258,15 +258,15 @@ class RationalPolynomial:
             # a/b - c/d = (a*d - b*c) / (b*d)
             new_numerator = (self.numerator * other.denominator) - (other.numerator * self.denominator)
             new_denominator = self.denominator * other.denominator
-
+            
             # Display the intermediate subtraction step
             print(f"Subtraction (Before Simplification): ({self.numerator}) * ({other.denominator}) - ({other.numerator}) * ({self.denominator})")
             print(f"= {new_numerator}/{new_denominator}")
-
+            
             # Return the resulting rational polynomial
             result = RationalPolynomial(new_numerator, new_denominator)
             result.simplify()  # Simplify the result
-
+            
             # Display the simplified result
             print(f"Simplified Result: {result}")
             return result
@@ -281,11 +281,11 @@ class RationalPolynomial:
             # Display the intermediate multiplication step
             print(f"Multiplication (Before Simplification): ({self.numerator}) * ({other.numerator})")
             print(f"= {new_numerator}/{new_denominator}")
-
+            
             # Return the resulting rational polynomial
             result = RationalPolynomial(new_numerator, new_denominator)
             result.simplify()  # Simplify the result
-
+            
             # Display the simplified result
             print(f"Simplified Result: {result}")
             return result
@@ -300,12 +300,20 @@ class RationalPolynomial:
             # Display the intermediate division step
             print(f"Division (Before Simplification): ({self.numerator}) * ({other.denominator}) / ({self.denominator}) * ({other.numerator})")
             print(f"= {new_numerator}/{new_denominator}")
-
+            
             # Return the resulting rational polynomial
             result = RationalPolynomial(new_numerator, new_denominator)
             result.simplify()  # Simplify the result
-
+            
             # Display the simplified result
             print(f"Simplified Result: {result}")
             return result
 
+    # Equality check of two rational polynomials
+    def __eq__(self, other):
+        if isinstance(other, RationalPolynomial):
+            # Cross-multiply to check for equality
+            left = self.numerator * other.denominator
+            right = self.denominator * other.numerator
+            return left == right
+        return False
