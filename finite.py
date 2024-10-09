@@ -118,7 +118,6 @@ class DifferenceUniformGrid(Difference):
 
 class DifferenceNonUniformGrid(Difference):
     def __init__(self, derivative_order, convergence_order, grid, axis=0, stencil_type='centered'):
-        if (derivative_order + convergence_order) % 2 == 0:
         self.derivative_order = derivative_order
         self.convergence_order = convergence_order
         self.stencil_type = stencil_type
