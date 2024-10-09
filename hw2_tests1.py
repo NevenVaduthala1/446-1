@@ -26,8 +26,7 @@ def test_UFD_2(order_index):
   f = 1/(2+np.sin(x)**2)
   d2 = finite.DifferenceUniformGrid(2, order, grid)
   d2f = d2 @ f
-  d2f0 = (8*np.cos(x)**2*np.sin(x)**2)/(2 + np.sin(x)**2)**3 -
-  (2*np.cos(x)**2)/(2 + np.sin(x)**2)**2 + (2*np.sin(x)**2)/(2 + np.sin(x)**2)**2
+  d2f0 = (8*np.cos(x)**2*np.sin(x)**2)/(2 + np.sin(x)**2)**3 - (2*np.cos(x)**2)/(2 + np.sin(x)**2)**2 + (2*np.sin(x)**2)/(2 + np.sin(x)**2)**2
   error = np.max(np.abs(d2f - d2f0))
   error_est = error_bound_2[order_index]
   assert error < error_est
