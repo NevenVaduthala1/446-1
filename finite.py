@@ -2,9 +2,7 @@ import numpy as np
 from scipy.special import factorial
 from scipy import sparse
 
-# Helper functions
 def apply_matrix(mat, arr, ax, **kwargs):
-    """Contract any direction of a multidimensional array with a matrix."""
     dim = len(arr.shape)
     # Build Einstein signatures
     mat_sig = [dim, ax]
@@ -16,12 +14,10 @@ def apply_matrix(mat, arr, ax, **kwargs):
     return np.einsum(mat, mat_sig, arr, arr_sig, out_sig, **kwargs)
 
 def reshape_vector(vec, dims=2, ax=-1):
-    """Reshape 1-dim array as a multidimensional vector."""
     shape = [1] * dims
     shape[ax] = vec.size
     return vec.reshape(shape)
 
-# Grid classes
 class UniformPeriodicGrid:
     def __init__(self, N, length):
         self.values = np.linspace(0, length, N, endpoint=False)
@@ -59,9 +55,7 @@ class UniformNonPeriodicGrid:
         self.dx = (self.end - self.start) / (N - 1)
         self.N = N
         self.values = np.linspace(self.start, self.end, N, endpoint=True)
-
-
-# Domain Class
+        
 class Domain:
     def __init__(self, grids):
         self.dimension = len(grids)
@@ -75,9 +69,7 @@ class Domain:
         expanded_shape = np.array(self.shape, dtype=np.int) + 1
         return [np.broadcast_to(reshape_vector(np.concatenate((grid.values, [grid.length])), self.dimension, i), expanded_shape)
                 for i, grid in enumerate(self.grids)]
-
-
-# Difference classes and operators
+        
 class Difference:
     def __matmul__(self, other):
         return apply_matrix(self.matrix, other, ax=self.axis)
@@ -127,7 +119,6 @@ class DifferenceUniformGrid(Difference):
 class DifferenceNonUniformGrid(Difference):
     def __init__(self, derivative_order, convergence_order, grid, axis=0, stencil_type='centered'):
         if (derivative_order + convergence_order) % 2 == 0:
-            raise ValueError("The derivative plus convergence order must be odd for centered finite difference")
         self.derivative_order = derivative_order
         self.convergence_order = convergence_order
         self.stencil_type = stencil_type
