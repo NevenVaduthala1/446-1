@@ -1,5 +1,6 @@
 import pytest
 import finite
+import numpy as np
 
 order_range = [2, 4, 6, 8]
 error_bound_1 = [0.0011052024716421555, 1.3849193579502928e-05, 3.784245780277806e-07, 1.7638375468531642e-08]
