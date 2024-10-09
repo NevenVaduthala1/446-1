@@ -1,4 +1,4 @@
-# Helper functions from K. J. Burns
+from scipy.special import factorial
 import numpy as np
 from scipy import sparse
 
