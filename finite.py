@@ -2,19 +2,19 @@ import numpy as np
 from scipy.special import factorial
 from scipy import sparse
 
-def apply_matrix(mat_data, arr_data, ax_idx, **kwargs):
-    dim_count = len(arr_data.shape)
-    mat_sig = [dim_count, ax_idx]
-    arr_sig = list(range(dim_count))
-    out_sig = list(range(dim_count))
-    out_sig[ax_idx] = dim_count
-    if sparse.isspmatrix(mat_data):
-        mat_data = mat_data.toarray()
-    return np.einsum(mat_data, mat_sig, arr_data, arr_sig, out_sig, **kwargs)
+def apply_matrix(mat, arr, axis):
+    if sparse.isspmatrix(mat):
+        mat = mat.toarray()  
+
+    dim = arr.ndim
+    axes_in = list(range(dim))  
+    axes_out = axes_in.copy()
+    axes_out[axis] = dim  
+    return np.einsum(mat, [dim, axis], arr, axes_in, axes_out)
 
 def reshape_vector(vec_data, dim_count=2, ax_idx=-1):
     shape_vec = [1] * dim_count
-    shape_vec[ax_idx] = vec_data.size
+    shape_vec[ax_idx] = -1  
     return vec_data.reshape(shape_vec)
 
 
@@ -32,24 +32,15 @@ class NonUniformPeriodicGrid:
         self.N = len(val_list)
 
     def dx_array(self, stencil_vals):
-        shape_arr = (self.N, len(stencil_vals))
-        dx_matrix = np.zeros(shape_arr)
-        jmin = -np.min(stencil_vals)
-        jmax = np.max(stencil_vals)
+        jmin, jmax = -np.min(stencil_vals), np.max(stencil_vals)
+        
+        # Create padded values array
+        padded_vals = np.concatenate([
+            self.values[-jmin:] - self.length if jmin > 0 else [],
+            self.values,
+            self.values[:jmax] + self.length if jmax > 0 else []])
 
-        padded_vals = np.zeros(self.N + jmin + jmax)
-        if jmin > 0:
-            padded_vals[:jmin] = self.values[-jmin:] - self.length
-        if jmax > 0:
-            padded_vals[jmin:-jmax] = self.values
-            padded_vals[-jmax:] = self.length + self.values[:jmax]
-        else:
-            padded_vals[jmin:] = self.values
-
-        for i in range(self.N):
-            dx_matrix[i, :] = padded_vals[jmin+i+stencil_vals] - padded_vals[jmin+i]
-
-        return dx_matrix
+        return padded_vals[jmin + np.arange(self.N)[:, None] + stencil_vals] - padded_vals[jmin + np.arange(self.N)[:, None]]
 
 class UniformNonPeriodicGrid:
     def __init__(self, grid_num, interval_range):
@@ -65,36 +56,27 @@ class Domain:
     def __init__(self, grid_list):
         self.dimension = len(grid_list)
         self.grids = grid_list
-        shape_list = []
-        for grid in self.grids:
-            shape_list.append(grid.N)
-        self.shape = shape_list
+        self.shape = [grid.N for grid in grid_list]  # Use list comprehension
 
     def values(self):
-        val_list = []
-        for i, grid in enumerate(self.grids):
-            grid_values = grid.values
-            grid_values = reshape_vector(grid_values, self.dimension, i)
-            val_list.append(grid_values)
-        return val_list
+        # Use list comprehension and reshape_vector directly
+        return [reshape_vector(grid.values, self.dimension, i) for i, grid in enumerate(self.grids)]
 
     def plotting_arrays(self):
-        val_list = []
-        expanded_shape = np.array(self.shape, dtype=np.int)
-        expanded_shape += 1
-        for i, grid in enumerate(self.grids):
-            grid_values = grid.values
-            grid_values = np.concatenate((grid_values, [grid.length]))
-            grid_values = reshape_vector(grid_values, self.dimension, i)
-            grid_values = np.broadcast_to(grid_values, expanded_shape)
-            val_list.append(grid_values)
-        return val_list
-
+        expanded_shape = np.array(self.shape) + 1
+        # Efficient use of np.concatenate and np.broadcast_to in a list comprehension
+        return [
+            np.broadcast_to(
+                reshape_vector(np.concatenate((grid.values, [grid.length])), self.dimension, i),
+                expanded_shape
+            )
+            for i, grid in enumerate(self.grids)
+        ]
 
 # Difference classes and operators
 class Difference:
     def __matmul__(self, other_arr):
-        return apply_matrix(self.matrix, other_arr, ax_idx=self.axis)
+        return apply_matrix(self.matrix, other_arr, axis=self.axis) 
 
 
 class DifferenceUniformGrid(Difference):
@@ -103,44 +85,35 @@ class DifferenceUniformGrid(Difference):
         self.convergence_order = convergence_order
         self.stencil_type = stencil_choice
         self.axis = ax_idx
-        self._stencil_shape(stencil_choice)
-        self._make_stencil(grid_inst)
+        self._build_stencil(grid_inst)
         self._build_matrix(grid_inst)
 
-    def _stencil_shape(self, stencil_choice):
+    def _build_stencil(self, grid_inst):
         dof_size = self.derivative_order + self.convergence_order
-        if stencil_choice == 'centered':
-            dof_size = dof_size - (1 - dof_size % 2)  # Ensure it's even
-            stencil_pos = np.arange(dof_size) - dof_size // 2
-        self.dof = dof_size
-        self.j = stencil_pos
+        if self.stencil_type == 'centered':
+            dof_size -= (1 - dof_size % 2)  # Ensure it's even
+        self.j = np.arange(dof_size) - dof_size // 2  # Stencil positions
 
-    def _make_stencil(self, grid_inst):
-        self.dx = grid_inst.dx
-        i_vals = np.arange(self.dof)[:, None]
+        i_vals = np.arange(dof_size)[:, None]
         j_vals = self.j[None, :]
-        stencil_matrix = 1 / factorial(i_vals) * (j_vals * self.dx)**i_vals
+        stencil_matrix = (j_vals * grid_inst.dx) ** i_vals / factorial(i_vals)
 
-        b_vals = np.zeros(self.dof)
+        b_vals = np.zeros(dof_size)
         b_vals[self.derivative_order] = 1.0
         self.stencil = np.linalg.solve(stencil_matrix, b_vals)
 
     def _build_matrix(self, grid_inst):
-        shape_arr = [grid_inst.N] * 2
-        mat_instance = sparse.diags(self.stencil, self.j, shape=shape_arr)
-        mat_instance = mat_instance.tocsr()
+        mat_instance = sparse.diags(self.stencil, self.j, shape=(grid_inst.N, grid_inst.N)).tocsr()
 
-        jmin = -np.min(self.j)
-        if jmin > 0:
-            for i in range(jmin):
-                mat_instance[i, -jmin+i:] = self.stencil[:jmin-i]
-
-        jmax = np.max(self.j)
-        if jmax > 0:
-            for i in range(jmax):
-                mat_instance[-jmax+i, :i+1] = self.stencil[-i-1:]
+        # Handle boundary conditions
+        jmin, jmax = -np.min(self.j), np.max(self.j)
+        for i in range(jmin):
+            mat_instance[i, -jmin + i:] = self.stencil[:jmin - i]
+        for i in range(jmax):
+            mat_instance[-jmax + i, :i + 1] = self.stencil[-i - 1:]
 
         self.matrix = mat_instance
+
 
 
 class DifferenceNonUniformGrid(Difference):
@@ -149,48 +122,35 @@ class DifferenceNonUniformGrid(Difference):
         self.convergence_order = convergence_order
         self.stencil_type = stencil_choice
         self.axis = ax_idx
-        self._stencil_shape(stencil_choice)
-        self._make_stencil(grid_inst)
+        self._build_stencil(grid_inst)
         self._build_matrix(grid_inst)
 
-    def _stencil_shape(self, stencil_choice):
+    def _build_stencil(self, grid_inst):
         dof_size = self.derivative_order + self.convergence_order
-        stencil_pos = np.arange(dof_size) - dof_size // 2
-        self.dof = dof_size
-        self.j = stencil_pos
-
-    def _make_stencil(self, grid_inst):
+        self.j = np.arange(dof_size) - dof_size // 2  # Stencil positions
         self.dx = grid_inst.dx_array(self.j)
 
-        i_vals = np.arange(self.dof)[None, :, None]
+        # Create stencil matrix using broadcasting
+        i_vals = np.arange(dof_size)[None, :, None]
         dx_vals = self.dx[:, None, :]
-        stencil_matrix = 1 / factorial(i_vals) * (dx_vals)**i_vals
+        stencil_matrix = (dx_vals ** i_vals) / factorial(i_vals)
 
-        b_vals = np.zeros((grid_inst.N, self.dof))
+        b_vals = np.zeros((grid_inst.N, dof_size))
         b_vals[:, self.derivative_order] = 1.0
         self.stencil = np.linalg.solve(stencil_matrix, b_vals)
 
     def _build_matrix(self, grid_inst):
-        shape_arr = [grid_inst.N] * 2
-        diag_list = []
-        for i, jj in enumerate(self.j):
-            if jj < 0:
-                slice_vals = slice(-jj, None, None)
-            else:
-                slice_vals = slice(None, None, None)
-            diag_list.append(self.stencil[slice_vals, i])
-        mat_instance = sparse.diags(diag_list, self.j, shape=shape_arr)
-        mat_instance = mat_instance.tocsr()
+        mat_instance = sparse.diags(
+            [self.stencil[slice(-j, None) if j < 0 else slice(None), i] for i, j in enumerate(self.j)],
+            self.j,
+            shape=(grid_inst.N, grid_inst.N)
+        ).tocsr()
 
-        jmin = -np.min(self.j)
-        if jmin > 0:
-            for i in range(jmin):
-                mat_instance[i, -jmin+i:] = self.stencil[i, :jmin-i]
-
-        jmax = np.max(self.j)
-        if jmax > 0:
-            for i in range(jmax):
-                mat_instance[-jmax+i, :i+1] = self.stencil[-jmax+i, -i-1:]
+        # Handle boundary conditions
+        jmin, jmax = -np.min(self.j), np.max(self.j)
+        for i in range(jmin):
+            mat_instance[i, -jmin + i:] = self.stencil[i, :jmin - i]
+        for i in range(jmax):
+            mat_instance[-jmax + i, :i + 1] = self.stencil[-jmax + i, -i - 1:]
 
         self.matrix = mat_instance
-
