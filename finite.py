@@ -122,39 +122,50 @@ class DifferenceNonUniformGrid(Difference):
         self.convergence_order = convergence_order
         self.stencil_type = stencil_choice
         self.axis = ax_idx
-        
-        # Ensure that _stencil_shape is called before using self.j
         self._stencil_shape(stencil_choice)
-        
-        # Now build stencil and matrix
-        self._build_stencil(grid_inst)
+        self._make_stencil(grid_inst)
         self._build_matrix(grid_inst)
 
     def _stencil_shape(self, stencil_choice):
-        dof_size = self.derivative_order + self.convergence_order
-        stencil_pos = np.arange(dof_size) - dof_size // 2
-        self.dof = dof_size
-        self.j = stencil_pos  # Ensure self.j is initialized here
+        # Set degrees of freedom based on derivative and convergence order
+        self.dof = self.derivative_order + self.convergence_order
+        self.j = np.arange(self.dof) - self.dof // 2
 
-    def _build_stencil(self, grid_inst):
-        self.dx = grid_inst.dx_array(self.j)  # This now works because self.j is initialized
-        dof = self.derivative_order + self.convergence_order
-        i_vals = np.arange(dof)[None, :, None]
+    def _make_stencil(self, grid_inst):
+        # Compute dx for the nonuniform grid based on stencil positions
+        self.dx = grid_inst.dx_array(self.j)
+
+        # Prepare the indices and dx powers
+        i_vals = np.arange(self.dof)[None, :, None]
         dx_vals = self.dx[:, None, :]
+
+        # Construct the stencil matrix
         stencil_matrix = (dx_vals ** i_vals) / factorial(i_vals)
 
-        b_vals = np.zeros((grid_inst.N, dof))
+        # Create the right-hand side (b_vals) for np.linalg.solve
+        b_vals = np.zeros((grid_inst.N, self.dof))
         b_vals[:, self.derivative_order] = 1.0
-        self.stencil = np.linalg.solve(stencil_matrix, b_vals)
+
+        # Solve for the stencil at each grid point
+        self.stencil = np.zeros_like(b_vals)
+        for i in range(grid_inst.N):
+            self.stencil[i, :] = np.linalg.solve(stencil_matrix[i, :, :], b_vals[i, :])
 
     def _build_matrix(self, grid_inst):
+        # Create the matrix from the stencil
         shape_arr = [grid_inst.N] * 2
         diag_list = []
+
         for i, jj in enumerate(self.j):
-            slice_vals = slice(-jj, None) if jj < 0 else slice(None)
+            if jj < 0:
+                slice_vals = slice(-jj, None)
+            else:
+                slice_vals = slice(None, None)
             diag_list.append(self.stencil[slice_vals, i])
+
         mat_instance = sparse.diags(diag_list, self.j, shape=shape_arr).tocsr()
 
+        # Handle periodic boundary conditions
         jmin = -np.min(self.j)
         if jmin > 0:
             for i in range(jmin):
@@ -166,4 +177,5 @@ class DifferenceNonUniformGrid(Difference):
                 mat_instance[-jmax + i, :i + 1] = self.stencil[-jmax + i, -i - 1:]
 
         self.matrix = mat_instance
+
 
