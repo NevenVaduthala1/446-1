@@ -122,35 +122,48 @@ class DifferenceNonUniformGrid(Difference):
         self.convergence_order = convergence_order
         self.stencil_type = stencil_choice
         self.axis = ax_idx
+        
+        # Ensure that _stencil_shape is called before using self.j
+        self._stencil_shape(stencil_choice)
+        
+        # Now build stencil and matrix
         self._build_stencil(grid_inst)
         self._build_matrix(grid_inst)
 
-    def _build_stencil(self, grid_inst):
+    def _stencil_shape(self, stencil_choice):
         dof_size = self.derivative_order + self.convergence_order
-        self.j = np.arange(dof_size) - dof_size // 2  # Stencil positions
-        self.dx = grid_inst.dx_array(self.j)
+        stencil_pos = np.arange(dof_size) - dof_size // 2
+        self.dof = dof_size
+        self.j = stencil_pos  # Ensure self.j is initialized here
 
-        # Create stencil matrix using broadcasting
-        i_vals = np.arange(dof_size)[None, :, None]
+    def _build_stencil(self, grid_inst):
+        self.dx = grid_inst.dx_array(self.j)  # This now works because self.j is initialized
+        dof = self.derivative_order + self.convergence_order
+        i_vals = np.arange(dof)[None, :, None]
         dx_vals = self.dx[:, None, :]
         stencil_matrix = (dx_vals ** i_vals) / factorial(i_vals)
 
-        b_vals = np.zeros((grid_inst.N, dof_size))
+        b_vals = np.zeros((grid_inst.N, dof))
         b_vals[:, self.derivative_order] = 1.0
         self.stencil = np.linalg.solve(stencil_matrix, b_vals)
 
     def _build_matrix(self, grid_inst):
-        mat_instance = sparse.diags(
-            [self.stencil[slice(-j, None) if j < 0 else slice(None), i] for i, j in enumerate(self.j)],
-            self.j,
-            shape=(grid_inst.N, grid_inst.N)
-        ).tocsr()
+        shape_arr = [grid_inst.N] * 2
+        diag_list = []
+        for i, jj in enumerate(self.j):
+            slice_vals = slice(-jj, None) if jj < 0 else slice(None)
+            diag_list.append(self.stencil[slice_vals, i])
+        mat_instance = sparse.diags(diag_list, self.j, shape=shape_arr).tocsr()
 
-        # Handle boundary conditions
-        jmin, jmax = -np.min(self.j), np.max(self.j)
-        for i in range(jmin):
-            mat_instance[i, -jmin + i:] = self.stencil[i, :jmin - i]
-        for i in range(jmax):
-            mat_instance[-jmax + i, :i + 1] = self.stencil[-jmax + i, -i - 1:]
+        jmin = -np.min(self.j)
+        if jmin > 0:
+            for i in range(jmin):
+                mat_instance[i, -jmin + i:] = self.stencil[i, :jmin - i]
+
+        jmax = np.max(self.j)
+        if jmax > 0:
+            for i in range(jmax):
+                mat_instance[-jmax + i, :i + 1] = self.stencil[-jmax + i, -i - 1:]
 
         self.matrix = mat_instance
+
