@@ -27,11 +27,9 @@ def test_FD(order_index):
 
 error_bound_2 = [0.0016531241262078115, 3.953150377056438e-06, 1.01879280197617e-08, 2.6460656709051168e-11]
 
-order_range_odd = [1, 3, 5, 7]
-
 @pytest.mark.parametrize('order_index', np.arange(4))
 def test_FD_2(order_index):
-    order = order_range_odd[order_index]
+    order = order_range[order_index]
     x = np.linspace(0, 1, 100, endpoint=False)
     y = 2*np.pi*(x + 0.1*np.sin(2*np.pi*x))
     grid = finite.NonUniformPeriodicGrid(y, 2*np.pi)
