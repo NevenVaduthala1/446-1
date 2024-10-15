@@ -178,36 +178,40 @@ class DifferenceNonUniformGrid(Difference):
 
         self.matrix = mat_instance
 
-# CenteredFiniteDifference and CenteredFiniteDifference4 classes
 class CenteredFiniteDifference(Difference):
     def __init__(self, grid, axis=0):
         self.axis = axis
-        h = grid.dx
+        dx_inv = 1 / (2 * grid.dx)
         N = grid.N
-        j = [-1, 0, 1]
-        diags = np.array([-1/(2*h), 0, 1/(2*h)])
-        matrix = sparse.diags(diags, offsets=j, shape=[N, N])
-        matrix = matrix.tocsr()
-        # Periodic boundary conditions
-        matrix[-1, 0] = 1/(2*h)
-        matrix[0, -1] = -1/(2*h)
-        self.matrix = matrix
+
+        # Diagonal values
+        diags = [-dx_inv, 0, dx_inv]
+        
+        # Create the sparse matrix with periodic boundary conditions
+        matrix = sparse.diags(diags, offsets=[-1, 0, 1], shape=(N, N)).tolil()
+
+        # Set periodic boundary conditions directly
+        matrix[0, -1] = -dx_inv
+        matrix[-1, 0] = dx_inv
+
+        self.matrix = matrix.tocsr()  # Convert to CSR format for efficient arithmetic
 
 class CenteredFiniteDifference4(Difference):
     def __init__(self, grid, axis=0):
         self.axis = axis
-        h = grid.dx
+        dx_inv = 1 / (12 * grid.dx)
         N = grid.N
-        j = [-2, -1, 0, 1, 2]
-        diags = np.array([1, -8, 0, 8, -1])/(12*h)
-        matrix = sparse.diags(diags, offsets=j, shape=[N, N])
-        matrix = matrix.tocsr()
-        # Periodic boundary conditions
-        matrix[-2, 0] = -1/(12*h)
-        matrix[-1, 0] = 8/(12*h)
-        matrix[-1, 1] = -1/(12*h)
 
-        matrix[0, -2] = 1/(12*h)
-        matrix[0, -1] = -8/(12*h)
-        matrix[1, -1] = 1/(12*h)
-        self.matrix = matrix
+        # Diagonal values for 4th-order finite difference
+        diags = [dx_inv, -8 * dx_inv, 0, 8 * dx_inv, -dx_inv]
+
+        # Create the sparse matrix with periodic boundary conditions
+        matrix = sparse.diags(diags, offsets=[-2, -1, 0, 1, 2], shape=(N, N)).tolil()
+
+        # Set periodic boundary conditions directly
+        matrix[0, -2], matrix[0, -1] = dx_inv, -8 * dx_inv
+        matrix[1, -1] = dx_inv
+        matrix[-2, 0] = -dx_inv
+        matrix[-1, 0], matrix[-1, 1] = 8 * dx_inv, -dx_inv
+
+        self.matrix = matrix.tocsr()  # Convert to CSR format for efficient arithmetic
