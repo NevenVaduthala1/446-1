@@ -179,3 +179,4 @@ def test_RK_4_4(resolution):
     error_est = error_RK_4_4[resolution]
 
     assert error < error_est
+
