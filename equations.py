@@ -1,5 +1,7 @@
 import numpy as np
 from scipy import sparse
+from timesteppers import StateVector, CrankNicolson, RK22
+import finite
 
 
 class ViscousBurgers:
