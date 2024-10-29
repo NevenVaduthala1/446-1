@@ -1,6 +1,6 @@
 import numpy as np
 from scipy import sparse
-from timesteppers import StateVector, CrankNicolson, RK22
+from timesteppers import StateVector, CrankNicolson
 import finite
 
 
