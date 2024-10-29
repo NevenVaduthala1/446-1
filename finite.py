@@ -4,18 +4,29 @@ from scipy import sparse
 
 def apply_matrix(mat, arr, axis):
     if sparse.isspmatrix(mat):
-        mat = mat.toarray()  
+        mat = mat.toarray()
 
     dim = arr.ndim
-    axes_in = list(range(dim))  
+    axes_in = list(range(dim))
     axes_out = axes_in.copy()
-    axes_out[axis] = dim  
+    axes_out[axis] = dim
     return np.einsum(mat, [dim, axis], arr, axes_in, axes_out)
 
 def reshape_vector(vec_data, dim_count=2, ax_idx=-1):
     shape_vec = [1] * dim_count
-    shape_vec[ax_idx] = -1  
+    shape_vec[ax_idx] = -1
     return vec_data.reshape(shape_vec)
+
+def axindex(axis, index):
+    
+    result = [slice(None)] * axis  # Prepare list of slices for leading axes
+    result.append(index)  # Append the index for the target axis
+    
+    return tuple(result)
+
+def axslice(axis, start, stop, step=None):
+    slice_obj = slice(start, stop, step)  # Create slice object
+    return axindex(axis, slice_obj)  # Use axindex to insert slice in the correct axis
 
 
 class UniformPeriodicGrid:
@@ -33,7 +44,7 @@ class NonUniformPeriodicGrid:
 
     def dx_array(self, stencil_vals):
         jmin, jmax = -np.min(stencil_vals), np.max(stencil_vals)
-        
+
         # Create padded values array
         padded_vals = np.concatenate([
             self.values[-jmin:] - self.length if jmin > 0 else [],
@@ -76,7 +87,7 @@ class Domain:
 # Difference classes and operators
 class Difference:
     def __matmul__(self, other_arr):
-        return apply_matrix(self.matrix, other_arr, axis=self.axis) 
+        return apply_matrix(self.matrix, other_arr, axis=self.axis)
 
 
 class DifferenceUniformGrid(Difference):
@@ -186,7 +197,7 @@ class CenteredFiniteDifference(Difference):
 
         # Diagonal values
         diags = [-dx_inv, 0, dx_inv]
-        
+
         # Create the sparse matrix with periodic boundary conditions
         matrix = sparse.diags(diags, offsets=[-1, 0, 1], shape=(N, N)).tolil()
 
