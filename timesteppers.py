@@ -1,7 +1,8 @@
 import numpy as np
-from scipy import sparse
+import scipy.sparse as sparse
 import scipy.sparse.linalg as spla
 from scipy.special import factorial
+from collections import deque
 
 # Base Timestepper class
 class Timestepper:
@@ -12,6 +13,7 @@ class Timestepper:
 
     def step(self, dt):
         self.u = self._step(dt)
+        self.dt = dt
         self.t += dt
         self.iter += 1
 
@@ -203,3 +205,101 @@ class BackwardDifferentiationFormula(ImplicitTimestepper):
 
         LHS = self.L.matrix - A[0] * self.I
         return spla.spsolve(LHS, A[1:] @ u_vec[:-1])
+
+class StateVector:
+    def __init__(self, variables, axis=0):
+        self.axis, self.variables = axis, variables
+        self.N = variables[0].shape[axis]
+        shape = list(variables[0].shape)
+        shape[axis] *= len(variables)
+        self.data = np.zeros(tuple(shape))
+        self.slices = [(slice(None),) * axis + (slice(i * self.N, (i + 1) * self.N),) for i in range(len(variables))]
+        self.gather()
+
+    def gather(self):
+        [np.copyto(self.data[s], v) for s, v in zip(self.slices, self.variables)]
+
+    def scatter(self):
+        [np.copyto(v, self.data[s]) for s, v in zip(self.slices, self.variables)]
+
+# IMEXTimestepper class
+class IMEXTimestepper(Timestepper):
+    def __init__(self, eq_set):
+        super().__init__()
+        self.X, self.M, self.L, self.F = eq_set.X, eq_set.M, eq_set.L, eq_set.F
+
+    def step(self, dt):
+        self.X.gather()
+        self.X.data = self._step(dt)
+        self.X.scatter()
+        self.dt, self.t, self.iter = dt, self.t + dt, self.iter + 1
+
+# Euler IMEX scheme
+class Euler(IMEXTimestepper):
+    def _step(self, dt):
+        if dt != self.dt:
+            LHS = self.M + dt * self.L
+            self.LU = spla.splu(LHS.tocsc(), permc_spec='NATURAL')
+        RHS = self.M @ self.X.data + dt * self.F(self.X)
+        return self.LU.solve(RHS)
+
+# CNAB (Crank-Nicolson Adams-Bashforth) IMEX scheme
+class CNAB(IMEXTimestepper):
+    def _step(self, dt):
+        if self.iter == 0:
+            # Euler step
+            LHS = self.M + dt * self.L
+            LU = spla.splu(LHS.tocsc(), permc_spec='NATURAL')
+
+            self.FX = self.F(self.X)
+            RHS = self.M @ self.X.data + dt * self.FX
+            self.FX_old = self.FX
+            return LU.solve(RHS)
+        else:
+            if dt != self.dt or self.iter == 1:
+                LHS = self.M + dt / 2 * self.L
+                self.LU = spla.splu(LHS.tocsc(), permc_spec='NATURAL')
+
+            self.FX = self.F(self.X)
+            RHS = self.M @ self.X.data - 0.5 * dt * self.L @ self.X.data + 3 / 2 * dt * self.FX - 1 / 2 * dt * self.FX_old
+            self.FX_old = self.FX
+            return self.LU.solve(RHS)
+
+# BDFExtrapolate (Backward Differentiation Formula with Extrapolation)
+class BDFExtrapolate(IMEXTimestepper):
+    def __init__(self, eq_set, steps):
+        super().__init__(eq_set)
+        self.steps = steps
+
+    def _step(self, dt):
+        if self.iter == 0:
+            global X_store, FX_store
+            X_store = [np.zeros_like(self.X.data) for _ in range(self.steps + 1)]
+            FX_store = [np.zeros_like(self.F(self.X)) for _ in range(self.steps)]
+            LHS = self.M + dt * self.L
+            FX_store[0], X_store[0] = self.F(self.X), self.X.data.copy()
+            return spla.spsolve(LHS, self.M @ self.X.data + dt * FX_store[0])
+
+        if 0 < self.iter < self.steps:
+            FX_store[1:self.iter + 1], X_store[1:self.iter + 1] = FX_store[:self.iter], X_store[:self.iter]
+            FX_store[0], X_store[0] = self.F(self.X), self.X.data.copy()
+            LHS = self.M + dt * self.L
+            return spla.spsolve(LHS, self.M @ self.X.data + dt * FX_store[0])
+
+        b_RHS = np.zeros(self.steps + 1)
+        b_RHS[1] = 1
+        S = np.array([[(1 / factorial(j)) * (-i * dt) ** j for j in range(self.steps + 1)] for i in range(self.steps + 1)])
+        a = b_RHS @ np.linalg.inv(S)
+
+
+        b_RHS2 = np.zeros(self.steps)
+        b_RHS2[0] = 1
+        S2 = np.array([[(1 / factorial(j)) * (-(i + 1) * dt) ** j for j in range(self.steps)] for i in range(self.steps)])
+        b = b_RHS2 @ np.linalg.inv(S2)
+
+        FX_store[1:self.steps], X_store[1:self.steps + 1] = FX_store[:self.steps - 1], X_store[:self.steps]
+        FX_store[0], X_store[0] = self.F(self.X), self.X.data.copy()
+
+        LHS = a[0] * self.M + self.L
+        RHS = -self.M @ (a[1:] @ X_store[:-1]) + b @ FX_store
+        return spla.spsolve(LHS, RHS)
