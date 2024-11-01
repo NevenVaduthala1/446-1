@@ -94,3 +94,4 @@ def test_wave(resolution, spatial_order):
     error = np.max(np.abs(solution - u))
     error_est = error_wave[(resolution,spatial_order)]
     assert error < error_est
+
