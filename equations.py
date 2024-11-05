@@ -91,10 +91,10 @@ class ViscousBurgers2D:
         self.dt = None
         # self.X = StateVector([u, v])
         grid_x,grid_y = domain.grids
-        d2x = DifferenceUniformGrid(2, spatial_order, grid_x, 0)
-        d2y = DifferenceUniformGrid(2, spatial_order, grid_y, 1)
-        dx = DifferenceUniformGrid(1, spatial_order, grid_x, 0)
-        dy = DifferenceUniformGrid(1, spatial_order, grid_y, 1)
+        d2x = finite.DifferenceUniformGrid(2, spatial_order, grid_x, 0)
+        d2y = finite.DifferenceUniformGrid(2, spatial_order, grid_y, 1)
+        dx = finite.DifferenceUniformGrid(1, spatial_order, grid_x, 0)
+        dy = finite.DifferenceUniformGrid(1, spatial_order, grid_y, 1)
         class Diffusionx:
             def __init__(self, u, v, nu, d2x):
                 self.X = StateVector([u, v], axis=0)
