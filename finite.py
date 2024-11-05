@@ -12,9 +12,9 @@ def apply_matrix(mat, arr, axis):
     axes_out[axis] = dim
     return np.einsum(mat, [dim, axis], arr, axes_in, axes_out)
 
-def reshape_vector(vec_data, dim_count=2, ax_idx=-1):
+def reshape_vector(vec_data, dim_count=2, axis=-1):
     shape_vec = [1] * dim_count
-    shape_vec[ax_idx] = -1
+    shape_vec[axis] = -1
     return vec_data.reshape(shape_vec)
 
 def axindex(axis, index):
@@ -95,7 +95,7 @@ class DifferenceUniformGrid(Difference):
         self.derivative_order = derivative_order
         self.convergence_order = convergence_order
         self.stencil_type = stencil_choice
-        self.axis = ax_idx
+        self.axis = axis
         self._build_stencil(grid_inst)
         self._build_matrix(grid_inst)
 
@@ -128,11 +128,11 @@ class DifferenceUniformGrid(Difference):
 
 
 class DifferenceNonUniformGrid(Difference):
-    def __init__(self, derivative_order, convergence_order, grid_inst, ax_idx=0, stencil_choice='centered'):
+    def __init__(self, derivative_order, convergence_order, grid_inst, axis=0, stencil_choice='centered'):
         self.derivative_order = derivative_order
         self.convergence_order = convergence_order
         self.stencil_type = stencil_choice
-        self.axis = ax_idx
+        self.axis = axis
         self._stencil_shape(stencil_choice)
         self._make_stencil(grid_inst)
         self._build_matrix(grid_inst)
