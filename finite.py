@@ -91,7 +91,7 @@ class Difference:
 
 
 class DifferenceUniformGrid(Difference):
-    def __init__(self, derivative_order, convergence_order, grid_inst, ax_idx=0, stencil_choice='centered'):
+    def __init__(self, derivative_order, convergence_order, grid_inst, axis=0, stencil_choice='centered'):
         self.derivative_order = derivative_order
         self.convergence_order = convergence_order
         self.stencil_type = stencil_choice
