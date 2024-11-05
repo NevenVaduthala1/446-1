@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.sparse as sparse
 import finite
+from finite import apply_matrix
 import scipy.sparse.linalg as spla
 from scipy.special import factorial
 from collections import deque
