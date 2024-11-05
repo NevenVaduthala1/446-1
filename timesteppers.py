@@ -81,12 +81,6 @@ class Multistage(ExplicitTimestepper):
 
         return u_new
 
-def RK22(eq_set):
-    a = np.array([[  0,   0],
-                  [1/2,   0]])
-    b = np.array([0, 1])
-    return Multistage(eq_set, 2, a, b)
-
 # Adams-Bashforth (Multistep)
 class AdamsBashforth(ExplicitTimestepper):
     def __init__(self, u, f, steps, dt):
