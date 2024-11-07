@@ -86,8 +86,8 @@ class ViscousBurgers2D:
         grid_x, grid_y = domain.grids
 
         # Differential operators
-        d2x, d2y = [DifferenceUniformGrid(2, spatial_order, grid, axis) for axis, grid in enumerate(domain.grids)]
-        dx, dy = [DifferenceUniformGrid(1, spatial_order, grid, axis) for axis, grid in enumerate(domain.grids)]
+        d2x, d2y = [finite.DifferenceUniformGrid(2, spatial_order, grid, axis) for axis, grid in enumerate(domain.grids)]
+        dx, dy = [finite.DifferenceUniformGrid(1, spatial_order, grid, axis) for axis, grid in enumerate(domain.grids)]
 
         # Function to create a diffusion stepper
         def diffusion_stepper(d2, axis):
