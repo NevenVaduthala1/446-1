@@ -80,101 +80,39 @@ class ReactionDiffusion2D:
         self.t += dt
         self.iter += 1
 
-
-
-
 class ViscousBurgers2D:
-
     def __init__(self, u, v, nu, spatial_order, domain):
-        self.t = 0
-        self.iter = 0
-        self.dt = None
-        # self.X = StateVector([u, v])
-        grid_x,grid_y = domain.grids
-        d2x = finite.DifferenceUniformGrid(2, spatial_order, grid_x, 0)
-        d2y = finite.DifferenceUniformGrid(2, spatial_order, grid_y, 1)
-        dx = finite.DifferenceUniformGrid(1, spatial_order, grid_x, 0)
-        dy = finite.DifferenceUniformGrid(1, spatial_order, grid_y, 1)
-        class Diffusionx:
-            def __init__(self, u, v, nu, d2x):
-                self.X = StateVector([u, v], axis=0)
-                N = len(u)
-                I = sparse.eye(N, N)
-                Z = sparse.csr_matrix((N, N))
+        self.t, self.iter = 0, 0
+        grid_x, grid_y = domain.grids
 
-                M00 = I
-                M01 = Z
-                M10 = Z
-                M11 = I
-                self.M = sparse.bmat([[M00, M01],
-                                    [M10, M11]])
-                L00 = d2x.matrix
-                L01 = Z
-                L10 = Z
-                L11 = d2x.matrix
-                self.L = -nu*sparse.bmat([[L00, L01],
-                                    [L10, L11]])
-        class Diffusiony:
-            def __init__(self, u, v, nu, d2y):
-                self.X = StateVector([u, v], axis=1)
-                N = len(u)
-                I = sparse.eye(N, N)
-                Z = sparse.csr_matrix((N, N))
+        # Differential operators
+        d2x, d2y = [DifferenceUniformGrid(2, spatial_order, grid, axis) for axis, grid in enumerate(domain.grids)]
+        dx, dy = [DifferenceUniformGrid(1, spatial_order, grid, axis) for axis, grid in enumerate(domain.grids)]
 
-                M00 = I
-                M01 = Z
-                M10 = Z
-                M11 = I
-                self.M = sparse.bmat([[M00, M01],
-                                    [M10, M11]])
-                L00 = d2y.matrix
-                L01 = Z
-                L10 = Z
-                L11 = d2y.matrix
-                self.L = -nu*sparse.bmat([[L00, L01],
-                                    [L10, L11]])
-        diffx = Diffusionx(u,v,nu,d2x)
-        diffy = Diffusiony(u,v,nu,d2y)
-        self.ts_x = CrankNicolson(diffx,0)
-        self.ts_y = CrankNicolson(diffy,1)
+        # Function to create a diffusion stepper
+        def diffusion_stepper(d2, axis):
+            N, I = len(u), sparse.eye(len(u))
+            L = -nu * sparse.bmat([[d2.matrix, None], [None, d2.matrix]])
+            return CrankNicolson(type('', (), {'X': StateVector([u, v], axis), 'M': sparse.bmat([[I, None], [None, I]]), 'L': L})(), axis)
+
+        self.ts_x, self.ts_y = diffusion_stepper(d2x, 0), diffusion_stepper(d2y, 1)
+
+        # Advection stepper
         class Advection:
-            def __init__(self, u, v, dx, dy):
+            def __init__(self):
                 self.X = StateVector([u, v])
-                N = len(u)
-                I = sparse.eye(N, N)
-                Z = sparse.csr_matrix((N, N))
+                N, I = len(u), sparse.eye(len(u))
+                self.M = sparse.bmat([[I, None], [None, I]])
+                self.F = lambda X: -(
+                    sparse.kron([[1], [1]], X.data[:N]).multiply(sparse.kron(sparse.eye(2), dx.matrix) @ X.data) +
+                    sparse.kron([[1], [1]], X.data[N:]).multiply(dy @ X.data)
+                )
 
-                M00 = I
-                M01 = Z
-                M10 = Z
-                M11 = I
-                self.M = sparse.bmat([[M00, M01],
-                                    [M10, M11]])
-                self.L = lambda X: 0*X.data
-                # print(np.allclose(u,self.X.variables[0]))
-                def f(X):
-                    # [u,u] matrix X [dudx, dvdx]
-                    udup = sparse.kron(sparse.csr_matrix([[1],[1]]),X.data[:N,:])
-                    kronx = sparse.kron(sparse.eye(2,2),dx.matrix) @ X.data
-                    vdup = sparse.kron(sparse.csr_matrix([[1],[1]]),X.data[N:,:])
-                    # krony = sparse.kron(sparse.eye(2,2),dy.matrix) @ X.data
-                    krony = sparse.csr_matrix((2*N,N))
-                    krony[:N,:] = dy@X.data[:N,:]
-                    krony[N:,:] = dy@X.data[N:,:]
-                    return -udup.multiply(kronx)-vdup.multiply(krony)
-                self.F = f
-
-
-        self.ts_a = RK22(Advection(u,v,dx,dy))
-        pass
+        self.ts_a = RK22(Advection())
 
     def step(self, dt):
-        self.ts_x.step(dt/2)
-        self.ts_y.step(dt/2)
-        self.ts_a.step(dt/2)
-        self.ts_a.step(dt/2)
-        self.ts_y.step(dt/2)
-        self.ts_x.step(dt/2)
+        half_dt = dt / 2
+        for ts in [self.ts_x, self.ts_y, self.ts_a, self.ts_a, self.ts_y, self.ts_x]:
+            ts.step(half_dt)
         self.t += dt
         self.iter += 1
-        pass
