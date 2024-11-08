@@ -35,3 +35,5 @@ def test_reaction_diffusion(resolution, alpha):
     error_est = error_RD[(resolution,alpha)]
 
     assert error < error_est
+
+
