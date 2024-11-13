@@ -139,7 +139,7 @@ class DiffusionBC:
 
         # Initialize diffusion systems for x and y
         diffx = DiffusionSystem(c, D, finite.DifferenceUniformGrid(2, spatial_order, grid_x, 0), grid_x, axis=0, apply_bc=True)
-        diffy = DiffusionSystem(c, D, fintie.DifferenceUniformGrid(2, spatial_order, grid_y, 1), grid_y, axis=1)
+        diffy = DiffusionSystem(c, D, finite.DifferenceUniformGrid(2, spatial_order, grid_y, 1), grid_y, axis=1)
 
         # Crank-Nicolson time-stepping
         self.ts_x, self.ts_y = CrankNicolson(diffx, 0), CrankNicolson(diffy, 1)
