@@ -1,7 +1,7 @@
 import numpy as np
 from scipy import sparse
-from timesteppers import StateVector, CrankNicolson, RK22
 import finite
+import timesteppers
 
 class ViscousBurgers:
     def __init__(self, u, nu, d, d2):
@@ -116,3 +116,53 @@ class ViscousBurgers2D:
             ts.step(half_dt)
         self.t += dt
         self.iter += 1
+
+class DiffusionBC:
+    def __init__(self, c, D, spatial_order, domain):
+        self.t = 0
+        self.iter = 0
+        grid_x, grid_y = domain.grids
+
+        class DiffusionSystem:
+            def __init__(self, c, D, d2, grid, axis, apply_bc=False):
+                self.X = StateVector([c], axis=axis)
+                N = c.shape[axis]
+                self.M = sparse.eye(N, format='csr')
+                self.L = -D * d2.matrix
+                if apply_bc:  # Apply boundary conditions for x-direction
+                    self.M[0, :], self.M[-1, :] = 0, 0
+                    self.L[0, :], self.L[-1, :] = 0, np.zeros(N)
+                    self.L[0, 0] = 1
+                    BC_vector = [(1/2)/grid.dx, -2/grid.dx, (3/2)/grid.dx]
+                    self.L[-1, -3:] = BC_vector
+                self.L.eliminate_zeros()
+
+        # Initialize diffusion systems for x and y
+        diffx = DiffusionSystem(c, D, finite.DifferenceUniformGrid(2, spatial_order, grid_x, 0), grid_x, axis=0, apply_bc=True)
+        diffy = DiffusionSystem(c, D, fintie.DifferenceUniformGrid(2, spatial_order, grid_y, 1), grid_y, axis=1)
+
+        # Crank-Nicolson time-stepping
+        self.ts_x, self.ts_y = CrankNicolson(diffx, 0), CrankNicolson(diffy, 1)
+
+    def step(self, dt):
+        for _ in range(2):  # Perform two half-steps
+            self.ts_x.step(dt / 2)
+            self.ts_y.step(dt / 2)
+        self.t += dt
+        self.iter += 1
+
+class Wave2DBC:
+    def __init__(self, u, v, p, spatial_order, domain):
+        self.t = self.iter = 0
+        grid_x, grid_y = domain.grids
+        dx, dy = (finite.DifferenceUniformGrid(1, spatial_order, g, i) for g, i in [(grid_x, 0), (grid_y, 1)])
+        N = len(u)
+        self.X = StateVector([u, v, p])
+
+        # Define force and boundary condition functions
+        self.F = lambda X: np.vstack([
+            -(dx @ X.data[2 * N:3 * N, :]),
+            -(dy @ X.data[2 * N:3 * N, :]),
+            -(dx @ X.data[0:N, :]) - (dy @ X.data[N:2 * N, :])
+        ])
+        self.BC = lambda X: (X.data[0, :N].fill(0), X.data[N-1, :N].fill(0))
