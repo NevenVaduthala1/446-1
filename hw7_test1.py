@@ -50,3 +50,4 @@ def test_diffusion_equation(resolution, alpha, spatial_order):
     error_est = error_diffusion[(resolution, alpha, spatial_order)]
 
     assert error < error_est
+
