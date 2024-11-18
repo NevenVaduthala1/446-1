@@ -166,3 +166,36 @@ class Wave2DBC:
             -(dx @ X.data[0:N, :]) - (dy @ X.data[N:2 * N, :])
         ])
         self.BC = lambda X: (X.data[0, :N].fill(0), X.data[N-1, :N].fill(0))
+
+class ReactionDiffusionFI:
+    def __init__(self, c, D, spatial_order, grid):
+        self.X, self.N = StateVector([c]), len(c)
+        d2 = finite.DifferenceUniformGrid(2, spatial_order, grid)
+        self.M, self.L = sparse.eye(self.N), -D * d2.matrix
+        self.F = lambda X: X.data * (1 - X.data)
+        self.J = lambda X: sparse.eye(self.N) - 2 * sparse.diags(X.data)
+
+class BurgersFI:
+    def __init__(self, u, nu, spatial_order, grid):
+        d, d2 = finite.DifferenceUniformGrid(1, spatial_order, grid), finite.DifferenceUniformGrid(2, spatial_order, grid)
+        self.X, N = StateVector([u]), len(u)
+        self.M, self.L = sparse.eye(N), -nu * d2.matrix
+        self.F = lambda X: -X.data * (d @ X.data)
+        self.J = lambda X: -sparse.diags(d @ X.data) - sparse.diags(X.data) @ d.matrix
+
+class ReactionTwoSpeciesDiffusion:
+    def __init__(self, X, D, r, spatial_order, grid):
+        N = len(X.variables[0])
+        d2 = finite.DifferenceUniformGrid(2, spatial_order, grid)
+        I, Z = sparse.eye(N), sparse.csr_matrix((N, N))
+        self.X, self.M, self.L = X, sparse.bmat([[I, Z], [Z, I]]), sparse.bmat([[-D * d2.matrix, Z], [Z, -D * d2.matrix]])
+        
+        self.F = lambda X: np.concatenate([
+            X.data[:N] * (1 - X.data[:N] - X.data[N:]),
+            r * X.data[N:] * (X.data[:N] - X.data[N:])
+        ])
+        self.J = lambda X: sparse.bmat([
+            [sparse.diags(1 - X.data[N:] - 2 * X.data[:N]), sparse.diags(-X.data[:N])],
+            [sparse.diags(r * X.data[N:]), sparse.diags(r * (X.data[:N] - 2 * X.data[N:]))]
+        ])
+
