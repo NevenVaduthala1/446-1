@@ -232,3 +232,38 @@ class BDFExtrapolate(IMEXTimestepper):
         RHS = -self.M @ (a[1:] @ self.X_store[1:]) + b @ self.FX_store
         return spla.spsolve(LHS, RHS)
 
+class FullyImplicitTimestepper(Timestepper):
+    def __init__(self, eq_set, tol=1e-5):
+        super().__init__()
+        self.X, self.M, self.L, self.F, self.J, self.tol = eq_set.X, eq_set.M, eq_set.L, eq_set.F, eq_set.J, tol
+
+    def step(self, dt, guess=None):
+        self.X.gather()
+        self.X.data, self.t, self.iter = self._step(dt, guess), self.t + dt, self.iter + 1
+        self.X.scatter()
+
+class BackwardEulerFI(FullyImplicitTimestepper):
+    def _step(self, dt, guess):
+        if dt != self.dt: self.LHS_matrix, self.dt = self.M + dt * self.L, dt
+        self.X.data[:] = guess if guess is not None else self.X.data
+
+        RHS, residual, i_loop = self.M @ self.X.data, self.LHS_matrix @ self.X.data - dt * self.F(self.X) - self.M @ self.X.data, 0
+        while np.max(np.abs(residual)) > self.tol and i_loop <= 20:
+            jac = self.M + dt * (self.L - self.J(self.X))
+            self.X.data += spla.spsolve(jac, -residual)
+            residual, i_loop = self.LHS_matrix @ self.X.data - dt * self.F(self.X) - RHS, i_loop + 1
+
+class CrankNicolsonFI(FullyImplicitTimestepper):
+    def _step(self, dt, guess):
+        if guess is not None: self.X.data[:] = guess
+        RHS = (self.M - dt / 2 * self.L) @ self.X.data + dt / 2 * self.F(self.X)
+        residual = (self.M + dt / 2 * self.L) @ self.X.data - dt / 2 * self.F(self.X) - RHS
+        
+        i_loop = 0
+        while np.max(np.abs(residual)) > self.tol:
+            jac = self.M + dt / 2 * (self.L - self.J(self.X))
+            self.X.data += spla.spsolve(jac, -residual)
+            residual = (self.M + dt / 2 * self.L) @ self.X.data - dt / 2 * self.F(self.X) - RHS
+            i_loop += 1
+        
+        return self.X.data
