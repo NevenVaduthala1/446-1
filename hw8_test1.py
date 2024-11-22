@@ -64,3 +64,4 @@ def test_burgers(resolution, alpha):
     error_est = error_burgers[(resolution, alpha)]
 
     assert error < error_est
+

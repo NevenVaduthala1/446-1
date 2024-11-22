@@ -49,3 +49,4 @@ def test_reactiontwospecies(resolution, r, dt):
     error_est2 = error_c2[(resolution, dt, r)]
 
     assert (error1 < error_est1) and (error2 < error_est2)
+
